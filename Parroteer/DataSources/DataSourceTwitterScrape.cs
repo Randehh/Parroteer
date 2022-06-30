@@ -23,6 +23,10 @@ namespace Parroteer.DataSources {
 		public override string FileName => "Twitter_Scraped.json";
 		private string TweetLinkFormat => string.Format(@"https://twitter.com/{0}/status/", SourceID);
 		private string TweetLinksFunction => string.Format(GetTweetLinksFunctionTemplate, TweetLinkFormat);
+		private string TwitterSpinnerDetectFunction => @"Array.from(document.querySelectorAll('div')).map(div => div.className).filter(div => div.includes('r-17bb2tj'));";
+		private string TwitterNoTweetsFunction => @"Array.from(document.querySelectorAll('img')).map(img => img.src).filter(div => div.includes('rubber-chicken'));";
+
+		private TwitterScrapeDateProvider m_DateProvider;
 
 		private int m_ScraperCount = 5;
 		public int ScraperCount {
@@ -68,15 +72,19 @@ namespace Parroteer.DataSources {
 		}
 
 		private void GetDataProcess(DateTimeOffset since, DateTimeOffset until) {
-			TwitterScrapeDateProvider dateProvider = new TwitterScrapeDateProvider(since, until.AddDays(1));
-			dateProvider.OnNextDateTimeRequested += (o, e) => {
-				DataFetchProgress = dateProvider.CurrentProgress;
-				FetchStatus = dateProvider.CurrentProgressText;
+			if (m_DateProvider != null) {
+				return;
+			}
+
+			m_DateProvider = new TwitterScrapeDateProvider(since, until.AddDays(1));
+			m_DateProvider.OnNextDateTimeRequested += (o, e) => {
+				DataFetchProgress = m_DateProvider.CurrentProgress;
+				FetchStatus = m_DateProvider.CurrentProgressText;
 			};
 
 			for (int i = 0; i < ScraperCount; i++) {
 				Task.Run(async () => {
-					await ScrapeUser(dateProvider);
+					await ScrapeUser(m_DateProvider);
 					OnDataReceived();
 				});
 			}
@@ -89,7 +97,13 @@ namespace Parroteer.DataSources {
 
 		private async Task ScrapeUser(TwitterScrapeDateProvider datetimeProvider) {
 			await new BrowserFetcher().DownloadAsync(BrowserFetcher.DefaultChromiumRevision);
-			using (Browser browser = await Puppeteer.LaunchAsync(new LaunchOptions { Headless = true })) {
+
+			LaunchOptions launchOptions = new LaunchOptions {
+				Headless = true,
+				Args = new string[] { "--disable-dev-shm-usage" },
+			};
+			launchOptions.Env.Add("CONNECTION_TIMEOUT", "1000");
+			using (Browser browser = await Puppeteer.LaunchAsync(launchOptions)) {
 				using (Page page = await browser.NewPageAsync()) {
 					await ScrapeUserTask(page, datetimeProvider);
 				}
@@ -105,20 +119,35 @@ namespace Parroteer.DataSources {
 				string currentUrl = string.Format(TwitterSearchUrlTemplate, SourceID, startRangeLow.ToString("yyyy-MM-dd"), startRangeHigh.ToString("yyyy-MM-dd"));
 
 				await page.GoToAsync(currentUrl);
+				await Task.Delay(2500);
 
 				string lastTweet = "";
 
 				while (true) {
+					int previousUrlCount = 0;
 					string[] urls = new string[0];
 					for (int i = 0; i < PageRetryCount; i++) {
 						urls = await page.EvaluateExpressionAsync<string[]>(TweetLinksFunction);
-						if (urls.Length != 0 && urls[urls.Length - 1] != lastTweet) break;
-						await page.EvaluateExpressionAsync("window.scrollBy(0, 1000)");
-						await Task.Delay(1000);
+						if (urls.Length == previousUrlCount) break;
+						previousUrlCount = urls.Length;
+						await page.EvaluateExpressionAsync("window.scrollBy(0, 100000)");
+						await Task.Delay(500);
+
+						while (true) {
+							string[] spinnerElements = await page.EvaluateExpressionAsync<string[]>(TwitterSpinnerDetectFunction);
+							if(spinnerElements.Length == 0) {
+								break;
+                            }
+							await Task.Delay(250);
+                        }
 					}
 
 					if (urls.Length == 0) {
-						// Next datetime, no tweets on this day
+						string[] noTweetsImages = await page.EvaluateExpressionAsync<string[]>(TwitterNoTweetsFunction);
+						if (noTweetsImages.Length == 0) {
+							// No tweets chicken not found, retry later
+							datetimeProvider.AddTimesToRetry(startRangeHigh, startRangeLow);
+						}
 						break;
 					} else {
 						if (urls[urls.Length - 1] == lastTweet) {
@@ -141,14 +170,18 @@ namespace Parroteer.DataSources {
 			}
 		}
 
+		private readonly object m_TweetsFoundLock = new object();
 		private void ProcessTweetUrl(string tweetUrl) {
 			string tweetIdString = tweetUrl.Split('/')[5];
 			if (tweetIdString.Contains("?")) {
 				tweetIdString = tweetIdString.Split('?')[0];
 			}
-			long tweetId;
-			if (long.TryParse(tweetIdString, out tweetId) && m_TweetsFound.Add(tweetId)) {
-				m_TweetsToFetch.Add(tweetId);
+
+			lock (m_TweetsFoundLock) {
+				long tweetId;
+				if (long.TryParse(tweetIdString, out tweetId) && m_TweetsFound.Add(tweetId)) {
+					m_TweetsToFetch.Add(tweetId);
+				}
 			}
 		}
 
@@ -201,14 +234,24 @@ namespace Parroteer.DataSources {
 		/// Provides a class from which multiple scrapers can get the next datetime to scrape
 		/// </summary>
 		private class TwitterScrapeDateProvider {
+
+			private Queue<Tuple<DateTimeOffset, DateTimeOffset>> m_TimesToRetry = new Queue<Tuple<DateTimeOffset, DateTimeOffset>>();
+			private bool m_IsRetrying = false;
+			private int m_TimesToRetryInitialCount = 0;
+
 			public event EventHandler OnNextDateTimeRequested;
 
 			public float CurrentProgress { get; set; }
 			public string CurrentProgressText {
-				get {
-					float totalDays = (float)(UntilTime - SinceTime).TotalDays;
-					CurrentProgress = (totalDays - (float)(StartRangeLow - SinceTime).TotalDays) / totalDays;
-					return $"Fetching {StartRangeLow:dd/MM/yyyy} to {StartRangeLow:dd/MM/yyyy}... Total: {(int)(CurrentProgress * 100)}%";
+				get
+				{
+					if (!m_IsRetrying) {
+						float totalDays = (float)(UntilTime - SinceTime).TotalDays;
+						CurrentProgress = (totalDays - (float)(StartRangeLow - SinceTime).TotalDays) / totalDays;
+						return $"Fetching {StartRangeLow:dd/MM/yyyy} to {StartRangeLow:dd/MM/yyyy}... Total: {(int)(CurrentProgress * 100)}%, pages to retry: {m_TimesToRetry.Count}";
+                    } else {
+						return $"Retrying times: {m_TimesToRetry.Count}/{m_TimesToRetryInitialCount}...";
+                    }
 				}
 			}
 
@@ -224,17 +267,46 @@ namespace Parroteer.DataSources {
 			}
 
 			public bool HasNextDate() {
-				return StartRangeHigh > SinceTime;
+				if(StartRangeHigh > SinceTime) {
+					return true;
+                }
+
+				if (m_TimesToRetry.Count > 0) {
+					if (!m_IsRetrying) {
+						m_IsRetrying = true;
+						m_TimesToRetryInitialCount = m_TimesToRetry.Count;
+					}
+					return true;
+				}
+
+				return true;
 			}
 
 			public void GetNextDateTime(out DateTimeOffset high, out DateTimeOffset low) {
-				StartRangeHigh = StartRangeHigh.AddDays(-1);
-				StartRangeLow = StartRangeHigh.AddDays(-1);
-				high = StartRangeHigh;
-				low = StartRangeLow;
+				if (!m_IsRetrying) {
+					StartRangeHigh = StartRangeHigh.AddDays(-1);
+					StartRangeLow = StartRangeHigh.AddDays(-1);
+					high = StartRangeHigh;
+					low = StartRangeLow;
+                } else {
+					if (m_TimesToRetry.Count == 0) {
+						throw new Exception("No times to retry exist");
+					}
+
+					Tuple<DateTimeOffset, DateTimeOffset> tuple = m_TimesToRetry.Dequeue();
+					high = tuple.Item1;
+					low = tuple.Item2;
+                }
 
 				OnNextDateTimeRequested?.Invoke(this, new EventArgs());
 			}
+
+			public void AddTimesToRetry(DateTimeOffset high, DateTimeOffset low) {
+                if (m_IsRetrying) {
+					return;
+                }
+				m_TimesToRetry.Enqueue(Tuple.Create(high, low));
+            }
 		}
 	}
 }
