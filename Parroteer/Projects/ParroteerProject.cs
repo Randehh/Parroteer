@@ -20,10 +20,10 @@ namespace Parroteer.Projects {
 		public string DataSourceDataPath => Path.Combine(DataSourceFolder, DataSource.FileName);
 		public string DataSourceSimplePath => Path.Combine(DataSourceFolder, "SimpleData.txt");
 		public string ModelTrainingFolder => Path.Combine(ProjectFolder, "ModelTraining");
+
 		public string ResultsFolder => Path.Combine(ProjectFolder, "Results");
 
 		private ParotteerProjectSerializer m_Serializer;
-		private ModelTrainer m_Trainer;
 
 		private IDataSource m_DataSource;
 		public IDataSource DataSource {
@@ -37,11 +37,18 @@ namespace Parroteer.Projects {
 		public string DataSourceString => DataSource.SourceType.ToString();
 		public bool CanAddDataSource => DataSource == null;
 
+		private ModelTrainer m_ModelTrainer;
+		public ModelTrainer ModelTrainer
+        {
+			get => m_ModelTrainer;
+			set => SetProperty(ref m_ModelTrainer, value);
+        }
+
 		public ParroteerProject(string projectName) {
 			ProjectName = projectName;
 
 			m_Serializer = new ParotteerProjectSerializer(this);
-			m_Trainer = new ModelTrainer(this);
+			m_ModelTrainer = new ModelTrainer(this);
 		}
 
 		public void SaveProjectData() {
@@ -63,11 +70,11 @@ namespace Parroteer.Projects {
 		}
 
 		public void StartTraining() {
-			m_Trainer.StartTraining();
+			m_ModelTrainer.StartTraining();
 		}
 
 		public void GenerateText() {
-			m_Trainer.GenerateText();
+			m_ModelTrainer.GenerateText();
 		}
 
 		private void CreateProjectFolders() {

@@ -55,10 +55,12 @@
 			</Grid.RowDefinitions>
 
 			<Grid Style="{StaticResource GridContainer}" Grid.Column="0" Grid.Row="0">
-				<Grid Margin="4">
+				<Grid Margin="6">
 					<Grid.RowDefinitions>
 						<RowDefinition Height="auto"/>
+                        <RowDefinition Height="3"/>
 						<RowDefinition Height="auto"/>
+                        <RowDefinition Height="3"/>
 						<RowDefinition Height="*"/>
 					</Grid.RowDefinitions>
 					<Grid.ColumnDefinitions>
@@ -66,16 +68,17 @@
 						<ColumnDefinition Width="2*"/>
 					</Grid.ColumnDefinitions>
 					<TextBlock Text="Data fetching" Style="{StaticResource TextBlockTitle}" Grid.Row="0" Grid.ColumnSpan="2"/>
-					<TextBlock Text="Status:" Grid.Row="1"/>
-					<TextBlock Text="{Binding Project.DataSource.Status, Converter={StaticResource StatusConverter}}" Grid.Row="1" Grid.Column="1"/>
-					<controls:TwitterPythonControl DataContext="{Binding Project.DataSource}" Grid.Row="2" Grid.ColumnSpan="2"/>
+					<TextBlock Text="Status:" Grid.Row="2"/>
+					<TextBlock Text="{Binding Project.DataSource.Status, Converter={StaticResource StatusConverter}}" Grid.Row="2" Grid.Column="1"/>
+					<controls:TwitterPythonControl DataContext="{Binding Project.DataSource}" Grid.Row="4" Grid.ColumnSpan="2"/>
 				</Grid>
 			</Grid>
 			
 			<Grid Style="{StaticResource GridContainer}" Grid.Column="2" Grid.Row="0">
 				<StackPanel Orientation="Vertical" Margin="4">
-					<TextBlock Text="Training" Style="{StaticResource TextBlockTitle}"/>
-				</StackPanel>
+                    <TextBlock Text="Training" Style="{StaticResource TextBlockTitle}"/>
+                    <controls:TrainingControl DataContext="{Binding Project.ModelTrainer}"/>
+                </StackPanel>
 			</Grid>
 			
 			<Grid Style="{StaticResource GridContainer}" Grid.Column="4" Grid.Row="0">

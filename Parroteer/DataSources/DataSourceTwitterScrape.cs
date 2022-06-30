@@ -20,6 +20,7 @@ namespace Parroteer.DataSources {
 
 		public override DataSourceTypes SourceType => DataSourceTypes.TWITTER_SCRAPER;
 		public override IDataSourceSerializer Serializer { get; set; }
+		public string TweetCountStatus => $"{DataLines.Count}, in queue: {m_CurrentBatchSize}";
 		public override string FileName => "Twitter_Scraped.json";
 		private string TweetLinkFormat => string.Format(@"https://twitter.com/{0}/status/", SourceID);
 		private string TweetLinksFunction => string.Format(GetTweetLinksFunctionTemplate, TweetLinkFormat);
@@ -41,12 +42,27 @@ namespace Parroteer.DataSources {
 		private OAuth2Token m_Session;
 		private BlockingCollection<long> m_TweetsToFetch = new BlockingCollection<long>();
 		private HashSet<long> m_TweetsFound = new HashSet<long>();
+		private int m_CurrentBatchSize = 0;
 
 		private string m_FetchStatus = "Ready.";
 		public string FetchStatus {
 			get => m_FetchStatus;
 			set => SetProperty(ref m_FetchStatus, value);
 		}
+
+		private string m_FetchStatusSecondary = "";
+		public string FetchStatusSecondary
+		{
+			get => m_FetchStatusSecondary;
+			set => SetProperty(ref m_FetchStatusSecondary, value);
+		}
+
+		private string m_FetchStatusProgress = "0%";
+		public string FetchStatusProgress
+        {
+			get => m_FetchStatusProgress;
+			set => SetProperty(ref m_FetchStatusProgress, value);
+        }
 
 		public DataSourceTwitterScrape(string twitterHandle) {
 			Serializer = new DataSourceTwitterScrapeSerializer(this);
@@ -79,7 +95,9 @@ namespace Parroteer.DataSources {
 			m_DateProvider = new TwitterScrapeDateProvider(since, until.AddDays(1));
 			m_DateProvider.OnNextDateTimeRequested += (o, e) => {
 				DataFetchProgress = m_DateProvider.CurrentProgress;
+				FetchStatusProgress = $"{MathF.Round(DataFetchProgress)}%";
 				FetchStatus = m_DateProvider.CurrentProgressText;
+				FetchStatusSecondary = m_DateProvider.SecondaryProgressText;
 			};
 
 			for (int i = 0; i < ScraperCount; i++) {
@@ -190,6 +208,10 @@ namespace Parroteer.DataSources {
 			int retryCount = 3;
 			foreach (long tweetId in m_TweetsToFetch.GetConsumingEnumerable()) {
 				batch.Add(tweetId);
+
+				m_CurrentBatchSize = batch.Count;
+				OnPropertyChanged(nameof(TweetCountStatus));
+
 				if (batch.Count != 100) {
 					continue;
 				}
@@ -200,6 +222,9 @@ namespace Parroteer.DataSources {
 					} catch (Exception) { }
 				}
 				batch.Clear();
+
+				m_CurrentBatchSize = 0;
+				OnPropertyChanged(nameof(TweetCountStatus));
 			}
 		}
 
@@ -248,12 +273,20 @@ namespace Parroteer.DataSources {
 					if (!m_IsRetrying) {
 						float totalDays = (float)(UntilTime - SinceTime).TotalDays;
 						CurrentProgress = (totalDays - (float)(StartRangeLow - SinceTime).TotalDays) / totalDays;
-						return $"Fetching {StartRangeLow:dd/MM/yyyy} to {StartRangeLow:dd/MM/yyyy}... Total: {(int)(CurrentProgress * 100)}%, pages to retry: {m_TimesToRetry.Count}";
+						return $"Fetching {StartRangeLow:dd/MM/yyyy} to {StartRangeLow:dd/MM/yyyy}...";
                     } else {
-						return $"Retrying times: {m_TimesToRetry.Count}/{m_TimesToRetryInitialCount}...";
+						return $"Retrying pages: {m_TimesToRetry.Count}/{m_TimesToRetryInitialCount}...";
                     }
 				}
 			}
+
+			public string SecondaryProgressText
+            {
+				get
+                {
+					return $"Pages to retry: {m_TimesToRetry.Count}";
+                }
+            }
 
 			public DateTimeOffset SinceTime { get; set; }
 			public DateTimeOffset UntilTime { get; set; }

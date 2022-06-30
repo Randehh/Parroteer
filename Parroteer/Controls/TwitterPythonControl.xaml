@@ -9,16 +9,17 @@
     <Grid>
 		<Grid.RowDefinitions>
 			<RowDefinition Height="*"/>
-			<RowDefinition Height="4"/>
+			<RowDefinition Height="3"/>
 			<RowDefinition Height="auto"/>
 		</Grid.RowDefinitions>
 
 		<Grid Grid.Row="0">
 			<Grid.RowDefinitions>
 				<RowDefinition Height="auto"/>
-				<RowDefinition Height="4"/>
+				<RowDefinition Height="3"/>
 				<RowDefinition Height="auto"/>
-				<RowDefinition Height="*"/>
+                <RowDefinition Height="3"/>
+                <RowDefinition Height="*"/>
 			</Grid.RowDefinitions>
 			<Grid.ColumnDefinitions>
 				<ColumnDefinition Width="1*"/>
@@ -26,9 +27,9 @@
 			</Grid.ColumnDefinitions>
 
 			<TextBlock Text="Tweet count:" Grid.Row="0"/>
-			<TextBlock Text="{Binding DataLines.Count}" Grid.Row="0" Grid.Column="1"/>
+            <TextBlock Text="{Binding TweetCountStatus}" Grid.Row="0" Grid.Column="1"/>
 			<TextBlock Text="Tweets found:" Grid.Row="2" Grid.ColumnSpan="2"/>
-			<DockPanel Grid.Row="3" Grid.ColumnSpan="2">
+			<DockPanel Grid.Row="4" Grid.ColumnSpan="2">
 				<ListBox ItemsSource="{Binding DataLines}" VirtualizingPanel.ScrollUnit="Pixel"/>
 			</DockPanel>
 		</Grid>
@@ -36,13 +37,18 @@
 		<Grid Grid.Row="2">
 			<Grid.RowDefinitions>
 				<RowDefinition Height="auto"/>
-				<RowDefinition Height="4"/>
-				<RowDefinition Height="8"/>
+				<RowDefinition Height="3"/>
+				<RowDefinition Height="20"/>
+                <RowDefinition Height="3"/>
 				<RowDefinition Height="auto"/>
-			</Grid.RowDefinitions>
+                <RowDefinition Height="3"/>
+                <RowDefinition Height="auto"/>
+            </Grid.RowDefinitions>
 			<Button Content="Get Tweets" Command="{Binding GetDataCommand}" Grid.Row="0" Grid.ColumnSpan="2"/>
 			<ProgressBar Value="{Binding DataFetchProgress}" Minimum="0" Maximum="1" Grid.Row="2" Grid.ColumnSpan="2"/>
-			<TextBlock Text="{Binding FetchStatus}" Grid.Row="3"/>
-		</Grid>
+            <TextBlock Text="{Binding FetchStatusProgress}" Grid.Row="2" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+			<TextBlock Text="{Binding FetchStatus}" Grid.Row="4"/>
+            <TextBlock Text="{Binding FetchStatusSecondary}" Grid.Row="6"/>
+        </Grid>
 	</Grid>
 </UserControl>

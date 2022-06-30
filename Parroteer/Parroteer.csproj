@@ -29,8 +29,19 @@
     <OutputPath>bin\x64\Release\</OutputPath>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Remove="Resources\**" />
+    <EmbeddedResource Remove="Resources\**" />
+    <None Remove="Resources\**" />
+    <Page Remove="Resources\**" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Remove="parroteer-6b05e84c48c5.json" />
+  </ItemGroup>
+  <ItemGroup>
     <Content Include="appsettings.json" />
-    <Content Include="Resources\GPT2Training.zip" />
+    <Content Include="parroteer-6b05e84c48c5.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
   <ItemGroup>
     <WCFMetadata Include="Connected Services\" />
@@ -49,6 +60,7 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="CoreTweet" Version="1.0.0.483" />
+    <PackageReference Include="Google.Apis.Drive.v3" Version="1.57.0.2684" />
     <PackageReference Include="HDF.PInvoke.1.10" Version="1.10.500" />
     <PackageReference Include="HtmlAgilityPack" Version="1.11.40" />
     <PackageReference Include="MethodBoundaryAspect.Fody" Version="2.0.139" />
