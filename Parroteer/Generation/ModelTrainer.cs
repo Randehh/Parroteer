@@ -2,6 +2,7 @@
 using Parroteer.Utilities;
 using Parroteer.ViewModels;
 using System;
+using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
@@ -15,12 +16,36 @@ namespace Parroteer.Generation {
 
 		private const string TRAINING_PACK_URL = @"https://drive.google.com/file/d/1dPGTYSeWGNueJtY5N6aEJlk02jHDZtlc/view?usp=sharing";
 
-		public event EventHandler OnModelsDownloaded;
+		public event EventHandler OnFileCreated;
 		public event EventHandler OnTrainedDataSaved;
 
 		private ParroteerProject m_Project;
-		private FileSystemWatcher m_ModelDownloadWatch;
+		private FileSystemWatcher m_FileCreatedWatch;
 		private FileSystemWatcher m_TrainingUpdatedWatch;
+
+		private ObservableCollection<string> m_TrainingLog = new ObservableCollection<string>();
+		public ObservableCollection<string> TrainingLog
+        {
+			get => m_TrainingLog;
+			set => SetProperty(ref m_TrainingLog, value);
+        }
+
+		private string m_PythonPath;
+		public string PythonPath
+        {
+			get
+            {
+                if (string.IsNullOrEmpty(m_PythonPath)) {
+					bool isInstalled = PythonUtilities.GetPythonPath(out m_PythonPath);
+					StepReadyTwo = isInstalled;
+				}
+				return m_PythonPath;
+            }
+        }
+
+		public bool IsPythonInstalled => !string.IsNullOrEmpty(PythonPath);
+
+		public string PythonStatus => $"Python status: {(IsPythonInstalled ? "installed" : "not installed")}";
 
 		private SimpleCommand m_DownloadTrainingPackCommand;
 		public SimpleCommand DownloadTrainingPackCommand
@@ -28,6 +53,13 @@ namespace Parroteer.Generation {
 			get => m_DownloadTrainingPackCommand;
             set => SetProperty(ref m_DownloadTrainingPackCommand, value);
         }
+
+		private SimpleCommand m_StartTrainingCommand;
+		public SimpleCommand StartTrainingCommand
+		{
+			get => m_StartTrainingCommand;
+			set => SetProperty(ref m_StartTrainingCommand, value);
+		}
 
 		private float m_DownloadProgress = 0;
 		public float DownloadProgress
@@ -43,10 +75,28 @@ namespace Parroteer.Generation {
 			set => SetProperty(ref m_DownloadProgressStatus, value);
 		}
 
+		private bool m_StepReadyTwo = false;
+		public bool StepReadyTwo
+        {
+			get => m_StepReadyTwo;
+			set => SetProperty(ref m_StepReadyTwo, value);
+        }
+
+		private bool m_StepReadyThree = false;
+		public bool StepReadyThree
+		{
+			get => m_StepReadyThree;
+			set => SetProperty(ref m_StepReadyThree, value);
+		}
+
 		public ModelTrainer(ParroteerProject project) {
 			m_Project = project;
 
 			DownloadTrainingPackCommand = new SimpleCommand((o) => DownloadTrainer());
+			StartTrainingCommand = new SimpleCommand((o) => StartTraining());
+
+			StepReadyTwo = IsPythonInstalled;
+			StepReadyThree = IsTrainerDownloaded();
 		}
 
 		public void DownloadTrainer() {
@@ -59,27 +109,47 @@ namespace Parroteer.Generation {
 					});
 					string zipPath = Path.Combine(m_Project.ModelTrainingFolder, "TrainingPack.zip");
 					File.WriteAllBytes(zipPath, memoryStream.ToArray());
-
+					
 					DownloadProgressStatus = "Extracting files...";
 					ZipFile.ExtractToDirectory(zipPath, m_Project.ModelTrainingFolder);
+					
+					DownloadProgressStatus = "Deleting zip file...";
+					File.Delete(zipPath);
+
+					DownloadProgressStatus = "Adjusting files...";
+					string configPath = Path.Combine(m_Project.ModelTrainingFolder, "gpt2_env", "pyvenv.cfg");
+					string[] configContent = await File.ReadAllLinesAsync(configPath);
+					configContent[0] = $"home = {PythonPath}";
+					await File.WriteAllLinesAsync(configPath, configContent);
 
 					DownloadProgressStatus = "Ready!";
+
+					Application.Current.Dispatcher.Invoke(() => {
+						StepReadyThree = true;
+					});
 				});
 			}
         }
 
+		public bool IsTrainerDownloaded() {
+			string modelsPath = Path.Combine(m_Project.ModelTrainingFolder, "models");
+			return Directory.Exists(modelsPath);
+        }
+
 		public void StartTraining() {
-			AttemptUnzipTrainer();
 
 			string modelPath = Path.Combine(m_Project.ModelTrainingFolder, "checkpoint", "run1");
 			if (!Directory.Exists(modelPath)) Directory.CreateDirectory(modelPath);
 
-			m_ModelDownloadWatch = new FileSystemWatcher(modelPath);
+			m_FileCreatedWatch = new FileSystemWatcher(modelPath);
 			
-			m_ModelDownloadWatch.EnableRaisingEvents = true;
-			m_ModelDownloadWatch.Created += (o, e) => {
-				OnModelsDownloaded(o, e);
-				m_ModelDownloadWatch = null;
+			m_FileCreatedWatch.EnableRaisingEvents = true;
+			m_FileCreatedWatch.Created += (o, e) => {
+				OnFileCreated?.Invoke(o, e);
+
+				Application.Current.Dispatcher.Invoke(() => {
+					TrainingLog.Add($"File created: {e.Name}");
+				});
 			};
 
 			Thread trainingThread = new Thread(TrainingProcess);
@@ -115,14 +185,6 @@ namespace Parroteer.Generation {
 				generateProcess.Start();
 				generateProcess.WaitForExit();
 			}
-		}
-
-		public void AttemptUnzipTrainer() {
-			if(Directory.GetFiles(m_Project.ModelTrainingFolder).Length != 0) {
-				return;
-			}
-
-			ZipFile.ExtractToDirectory("Resources\\GPT2Training.zip", m_Project.ModelTrainingFolder);
 		}
 	}
 }

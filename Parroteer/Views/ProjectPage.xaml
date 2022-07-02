@@ -55,7 +55,7 @@
 			</Grid.RowDefinitions>
 
 			<Grid Style="{StaticResource GridContainer}" Grid.Column="0" Grid.Row="0">
-				<Grid Margin="6">
+				<Grid Margin="9">
 					<Grid.RowDefinitions>
 						<RowDefinition Height="auto"/>
                         <RowDefinition Height="3"/>
@@ -73,13 +73,19 @@
 					<controls:TwitterPythonControl DataContext="{Binding Project.DataSource}" Grid.Row="4" Grid.ColumnSpan="2"/>
 				</Grid>
 			</Grid>
-			
-			<Grid Style="{StaticResource GridContainer}" Grid.Column="2" Grid.Row="0">
-				<StackPanel Orientation="Vertical" Margin="4">
-                    <TextBlock Text="Training" Style="{StaticResource TextBlockTitle}"/>
-                    <controls:TrainingControl DataContext="{Binding Project.ModelTrainer}"/>
-                </StackPanel>
-			</Grid>
+
+            <Grid Style="{StaticResource GridContainer}" Grid.Column="2" Grid.Row="0">
+                <Grid Margin="9">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="auto"/>
+                        <RowDefinition Height="3"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    
+                    <TextBlock Text="Training" Style="{StaticResource TextBlockTitle}" Grid.Row="0"/>
+                    <controls:TrainingControl DataContext="{Binding Project.ModelTrainer}" Grid.Row="2"/>
+                </Grid>
+            </Grid>
 			
 			<Grid Style="{StaticResource GridContainer}" Grid.Column="4" Grid.Row="0">
 				<StackPanel Orientation="Vertical" Margin="4">
