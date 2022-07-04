@@ -161,12 +161,43 @@ namespace Parroteer.Generation {
 		private void TrainingProcess() {
 			using (Process trainingProcess = new Process()) {
 				trainingProcess.StartInfo = new ProcessStartInfo(Path.Combine(m_Project.ModelTrainingFolder, "train_on_data.bat"), $"{m_Project.DataSourceSimplePath} {m_Project.ModelTrainingFolder}") {
-					CreateNoWindow = false,
+					CreateNoWindow = true,
 					UseShellExecute = false,
+					RedirectStandardOutput = true,
+					RedirectStandardError = true,
 				};
+				trainingProcess.EnableRaisingEvents |= true;
+                trainingProcess.OutputDataReceived += OnTrainingMessageStandard;
+				trainingProcess.ErrorDataReceived += OnTrainingMessageError;
 				trainingProcess.Start();
+				trainingProcess.BeginOutputReadLine();
+				trainingProcess.BeginErrorReadLine();
 				trainingProcess.WaitForExit();
 			}
+		}
+
+        private void OnTrainingMessageStandard(object sender, DataReceivedEventArgs e) {
+			string message = e.Data;
+            if (string.IsNullOrEmpty(message)) {
+				return;
+            }
+
+			OnTrainingMessage(message);
+		}
+
+		private void OnTrainingMessageError(object sender, DataReceivedEventArgs e) {
+			string message = e.Data;
+			if (string.IsNullOrEmpty(message)) {
+				return;
+			}
+
+			OnTrainingMessage($"Error: {message}");
+		}
+
+		private void OnTrainingMessage(string message) {
+			Application.Current.Dispatcher.Invoke(() => {
+				TrainingLog.Add(message);
+			});
 		}
 
 		public void GenerateText() {
